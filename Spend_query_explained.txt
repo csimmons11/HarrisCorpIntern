@@ -1,0 +1,102 @@
+SELECT V.business_unit, v.voucher_id,				SELECT business unit and voucher id(Field/Col) from PS_voucher(Record/Table)
+CASE WHEN v.origin <> 'PFM' THEN 'PFM'				CASE WHEN origin(field) in the voucher record is != 'PFM'(NonPO) then give it that value
+ELSE v.origin 							ELSE(it does have the value 'PFM') then leave the origin as is which is 'PFM'
+END AS vchr_type,						END AS the name of this field/col is vchr_type
+
+        v.invoice_id, 						Pull these subsequent fields/columns from either the voucher record or the payment record
+        v.invoice_dt, b.business_unit_gl, b.bank_setid,
+        b.bank_account_num, b.bank_acct_key, b.bank_cd, B.PYMNT_ID
+       --, a.*
+
+
+FROM PS_PYMNT_VCHR_XREF A, PS_PAYMENT_TBL B			FROM these records/tables
+,    PS_VOUCHER v
+,    PS_HS_VCHR_HDR_NP NPO
+WHERE A.BUSINESS_UNIT  <> 'TEST'   --  = $drv_bu		WHERE the field != 'Test'
+  AND V.GROSS_AMT <> 0						AND the gross amount != 0
+  AND V.ENTRY_STATUS <> 'X'         				AND the status != cancelled
+  AND V.ENTRY_STATUS <> 'T'          
+  AND V.ORIGIN <> 'LGC'             
+
+  AND   B.BANK_SETID = A.BANK_SETID				Joining these fields/columns from the payment_tbl record to the pymnt_vchr_xref record
+  AND   B.BANK_CD = A.BANK_CD					\\allows the tables to find commonalities between the rows
+  AND   B.BANK_ACCT_KEY = A.BANK_ACCT_KEY
+  AND   B.PYMNT_ID = A.PYMNT_ID
+
+  AND NPO.business_unit = v.business_unit			^
+  AND NPO.voucher_id = v.voucher_id
+
+  and v.business_unit = a.business_unit				^ it is just joining fields from other records/tables
+  and v.voucher_id = a.voucher_id
+
+  and /*(
+        (V.INVOICE_DT     BETWEEN (sysdate - 365)		Big AND Statement that is narrowing the records based on date for different fields 
+                              AND sysdate)				BEtWEEN Clause(system_date - 365 AND system_date)
+       OR
+        (V.LAST_UPDATE_DT  BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+        (V.INV_RECPT_DT   BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+        (V.DUE_DT          BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+*/        (B.PYMNT_DT        BETWEEN (sysdate - 365)		<- this is what we ended up using because we wanted *paid* vouchers
+                              AND sysdate)
+/*       OR
+        (B.CREATION_DT    BETWEEN (sysdate - 365)
+                              AND sysdate)
+      )
+*/
+
+UNION								UNION is just the joining together of two separate intities 
+
+SELECT V2.business_unit, v2.voucher_id,
+CASE WHEN v2.origin <> 'MPO' THEN 'MPO'				Doing the same thing as above but this time we are looking through the Mail PO
+ELSE v2.origin 
+END AS vchr_type,
+
+        v2.invoice_id, 
+        v2.invoice_dt, b2.business_unit_gl, b2.bank_setid,
+        b2.bank_account_num, b2.bank_acct_key, b2.bank_cd, B2.PYMNT_ID
+       --, a2.*
+
+
+FROM PS_PYMNT_VCHR_XREF A2, PS_PAYMENT_TBL B2
+,    PS_VOUCHER v2
+,    PS_HS_VCHR_HDR_NT MAIL
+WHERE A2.BUSINESS_UNIT  <> 'TEST'   --  = $drv_bu
+  AND V2.GROSS_AMT <> 0
+  AND V2.ENTRY_STATUS <> 'X'         
+  AND V2.ENTRY_STATUS <> 'T'          
+  AND V2.ORIGIN <> 'LGC'             
+
+  AND   B2.BANK_SETID = A2.BANK_SETID
+  AND   B2.BANK_CD = A2.BANK_CD
+  AND   B2.BANK_ACCT_KEY = A2.BANK_ACCT_KEY
+  AND   B2.PYMNT_ID = A2.PYMNT_ID
+
+  AND MAIL.business_unit = v2.business_unit
+  AND MAIL.voucher_id = v2.voucher_id
+
+  and v2.business_unit = a2.business_unit
+  and v2.voucher_id = a2.voucher_id
+
+  and /*(
+        (V2.INVOICE_DT     BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+        (V2.LAST_UPDATE_DT  BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+        (V2.INV_RECPT_DT   BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+        (V2.DUE_DT          BETWEEN (sysdate - 365)
+                              AND sysdate)
+       OR
+ */       (B2.PYMNT_DT        BETWEEN (sysdate - 365) AND sysdate)
+
+								After all of this: we still do not know how much was paid for each row
+								But we do know whether or not a row is a mail po or a non po
